@@ -1,0 +1,10 @@
+flask
+flask_cors
+waitress
+langchain
+langchain-community
+langchain-huggingface
+chromadb
+requests
+beautifulsoup4
+sentence-transformers
