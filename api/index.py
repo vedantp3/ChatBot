@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import traceback
+import threading
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from waitress import serve
@@ -19,15 +20,11 @@ from urllib.parse import urljoin
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-# MODIFICATION: Changed to a more general CORS configuration to ensure all origins are allowed.
 CORS(app)
 
 # --- Configuration ---
 TOGETHER_API_KEY = os.environ.get('tgp_v1_P219VY9RYZhULscfC_wx7Vt9Q6ZYf5CpqU-3-Smxrps')
-
-REQUESTS_HEADERS = {
-    'User-Agent': 'MyChatbotScraper/1.0 (mycontact@example.com)'
-}
+REQUESTS_HEADERS = { 'User-Agent': 'MyChatbotScraper/1.0 (mycontact@example.com)' }
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 100
 EMBEDDING_MODEL_LOCAL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -35,175 +32,136 @@ PERSIST_DIRECTORY = "chroma_db"
 
 # --- Global Variables ---
 embeddings = None
-models_loaded_successfully = True
+# This dictionary will now hold the status and the database for each session
 active_sessions = {}
 
 # --- Helper Function for API Calls ---
 def get_embeddings_from_api(texts: list[str]) -> list[list[float]]:
     """Gets embeddings for a list of texts using the Together.ai API."""
     api_url = "https://api.together.xyz/v1/embeddings"
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "togethercomputer/m2-bert-80M-8k-retrieval",
-        "input": texts
-    }
+    headers = { "Authorization": f"Bearer {TOGETHER_API_KEY}" }
     
-    response = requests.post(api_url, headers=headers, json=payload)
-    response.raise_for_status()
-    result = response.json()
-    return [data['embedding'] for data in result['data']]
+    # The API might have a limit on the number of texts per request, so we batch them.
+    all_embeddings = []
+    batch_size = 50 # A reasonable batch size
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        payload = { "model": "togethercomputer/m2-bert-80M-8k-retrieval", "input": batch }
+        response = requests.post(api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        all_embeddings.extend([data['embedding'] for data in result['data']])
+    return all_embeddings
 
 # --- Core Functions ---
 
 def discover_all_site_links(root_url: str) -> list[str]:
-    """Crawls a website starting from the root_url to discover all internal links."""
-    urls_to_visit = {root_url}
-    visited_urls = set()
-    all_site_links = set()
-    max_pages_to_scrape = 50 
-
-    while urls_to_visit and len(all_site_links) < max_pages_to_scrape:
+    urls_to_visit, visited_urls, all_site_links = {root_url}, set(), set()
+    max_pages = 30 # Reduced limit to speed up the process
+    while urls_to_visit and len(all_site_links) < max_pages:
         url = urls_to_visit.pop()
-        if url in visited_urls:
-            continue
-        
-        print(f"Discovering links on: {url}")
+        if url in visited_urls: continue
         visited_urls.add(url)
-        
         try:
             response = requests.get(url, headers=REQUESTS_HEADERS, timeout=10)
-            response.raise_for_status()
-            
-            if 'text/html' not in response.headers.get('Content-Type', ''):
-                continue
-
-            soup = BeautifulSoup(response.content, 'lxml')
-            all_site_links.add(url)
-
-            for link_tag in soup.find_all('a', href=True):
-                href = link_tag['href']
-                full_url = urljoin(url, href).split("#")[0]
-
-                if full_url.startswith(root_url) and full_url not in visited_urls:
-                    urls_to_visit.add(full_url)
-
+            if 'text/html' in response.headers.get('Content-Type', ''):
+                soup = BeautifulSoup(response.content, 'lxml')
+                all_site_links.add(url)
+                for link_tag in soup.find_all('a', href=True):
+                    full_url = urljoin(url, link_tag['href']).split("#")[0]
+                    if full_url.startswith(root_url) and full_url not in visited_urls:
+                        urls_to_visit.add(full_url)
         except requests.RequestException as e:
             print(f"Could not fetch {url}: {e}")
-
     return list(all_site_links)
 
-
 def extract_text_from_url(url, headers):
-    """Smarter scraper that targets main content."""
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'lxml')
-
-        for element_id in ['chatbot-toggle-button', 'chatbot-popup']:
-            if (found := soup.find(id=element_id)):
-                found.decompose()
-        
+        for tag_id in ['chatbot-toggle-button', 'chatbot-popup']:
+            if (tag := soup.find(id=tag_id)): tag.decompose()
         for tag in soup(['nav', 'footer', 'aside', 'script', 'style', 'header']):
             tag.decompose()
-        
         main_content = soup.find('main') or soup.find('article') or soup.body
-        if not main_content: return None, "No main content."
-            
-        text = main_content.get_text(separator=' ', strip=True)
-        return re.sub(r'\s\s+', ' ', text), soup.title.string if soup.title else "Unknown Title"
-
+        return re.sub(r'\s\s+', ' ', main_content.get_text(separator=' ', strip=True)), soup.title.string if soup.title else "Unknown"
     except Exception as e:
         print(f"Error processing {url}: {e}")
-        return None, f"Processing Error: {e}"
+        return None, None
 
-def load_data_and_create_db(root_url: str):
-    """Scrapes data, gets embeddings via API, and creates a Chroma DB."""
-    url_safe_name = re.sub(r'[^a-zA-Z0-9]', '_', root_url)
-    specific_persist_dir = os.path.join(PERSIST_DIRECTORY, url_safe_name)
+def background_load_and_process(url, session_id):
+    """This function runs in a background thread to avoid timeouts."""
+    try:
+        print(f"[{session_id}] Background processing started for {url}")
+        url_safe_name = re.sub(r'[^a-zA-Z0-9]', '_', url)
+        persist_dir = os.path.join(PERSIST_DIRECTORY, url_safe_name)
 
-    if os.path.exists(specific_persist_dir):
-        print(f"Loading existing vector store from: {specific_persist_dir}")
-        dummy_embed_func = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2", model_kwargs={'device':'cpu'})
-        db = Chroma(persist_directory=specific_persist_dir, embedding_function=dummy_embed_func)
-    else:
-        print(f"No existing vector store found. Starting crawl for: {root_url}")
-        
-        discovered_urls = discover_all_site_links(root_url)
-        if not discovered_urls: raise RuntimeError(f"Failed to discover links from {root_url}.")
-        
-        print(f"Discovered {len(discovered_urls)} pages to scrape.")
-        all_docs = []
-        for url in discovered_urls:
-            print(f"  Scraping: {url}")
-            scraped_text, page_title = extract_text_from_url(url, REQUESTS_HEADERS)
-            if scraped_text:
-                all_docs.append(Document(page_content=scraped_text, metadata={"source": url, "title": page_title}))
-        
-        if not all_docs: raise RuntimeError("No documents scraped.")
+        if os.path.exists(persist_dir):
+            print(f"[{session_id}] Loading existing vector store.")
+            db = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
+        else:
+            urls = discover_all_site_links(url)
+            docs = [Document(page_content=text, metadata={"source": doc_url}) for doc_url in urls if (text := extract_text_from_url(doc_url, REQUESTS_HEADERS)[0])]
+            if not docs: raise RuntimeError("No documents scraped.")
+            
+            texts = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP).split_documents(docs)
+            print(f"[{session_id}] Getting embeddings for {len(texts)} chunks via API...")
+            
+            text_contents = [doc.page_content for doc in texts]
+            text_embeddings = get_embeddings_from_api(text_contents)
+            text_metadatas = [doc.metadata for doc in texts]
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
-        texts = text_splitter.split_documents(all_docs)
-        
-        print(f"Getting embeddings for {len(texts)} chunks via API...")
-        text_contents = [doc.page_content for doc in texts]
-        text_embeddings = get_embeddings_from_api(text_contents)
-        text_metadatas = [doc.metadata for doc in texts]
+            print(f"[{session_id}] Creating and persisting vector store.")
+            db = Chroma.from_texts(texts=text_contents, embeddings=text_embeddings, metadatas=text_metadatas, persist_directory=persist_dir)
 
-        print(f"Creating and persisting vector store at: {specific_persist_dir}")
-        db = Chroma.from_texts(
-            texts=text_contents,
-            embedding=None,
-            embeddings=text_embeddings,
-            metadatas=text_metadatas,
-            persist_directory=specific_persist_dir
-        )
-    
-    return db
+        active_sessions[session_id]['db'] = db
+        active_sessions[session_id]['status'] = 'ready'
+        print(f"[{session_id}] Background processing finished successfully.")
+
+    except Exception as e:
+        print(f"[{session_id}] Error in background task: {e}")
+        traceback.print_exc()
+        active_sessions[session_id]['status'] = 'error'
 
 # --- Flask API Endpoints ---
 
 @app.route("/")
 def home():
-    return jsonify({"message": "RAG Chatbot API (Together.ai)", "status": "Ready"})
+    return jsonify({"message": "RAG Chatbot API (Async)", "status": "Ready"})
 
 @app.route("/api/load_url", methods=["POST"])
 def load_url_endpoint():
     data = request.get_json()
-    url = data.get("url")
-    session_id = data.get("session_id")
+    url, session_id = data.get("url"), data.get("session_id")
+    if not all([url, session_id]): return jsonify({"error": "URL and session_id required."}), 400
 
-    if not all([url, session_id]):
-        return jsonify({"error": "URL and session_id parameters are required."}), 400
-
-    print(f"Received request to load data for URL: {url} (Session: {session_id})")
+    active_sessions[session_id] = {'status': 'loading', 'db': None}
     
-    try:
-        new_db = load_data_and_create_db(url)
-        active_sessions[session_id] = new_db
-        print(f"Session {session_id} created. Total active sessions: {len(active_sessions)}")
-        return jsonify({"message": f"Successfully loaded data for {url}"}), 200
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    # Start the long-running task in a background thread
+    thread = threading.Thread(target=background_load_and_process, args=(url, session_id))
+    thread.start()
+    
+    # Immediately return a response to the client
+    return jsonify({"message": "Processing started.", "session_id": session_id}), 202
+
+@app.route("/api/load_status/<session_id>", methods=["GET"])
+def load_status_endpoint(session_id):
+    session = active_sessions.get(session_id)
+    if not session: return jsonify({"status": "not_found"}), 404
+    return jsonify({"status": session['status']})
 
 @app.route("/api/get_response", methods=["POST"])
 def get_bot_response_api():
     data = request.json
-    query = data.get("query")
-    session_id = data.get("session_id")
+    query, session_id = data.get("query"), data.get("session_id")
+    if not all([query, session_id]): return jsonify({"error": "Query and session_id required."}), 400
 
-    if not all([query, session_id]):
-        return jsonify({"error": "Query and session_id parameters are required."}), 400
-
-    db = active_sessions.get(session_id)
-    if not db:
-        return jsonify({"error": "Invalid session ID or session has expired."}), 404
+    session = active_sessions.get(session_id)
+    if not session or session['status'] != 'ready':
+        return jsonify({"error": "Session not ready or invalid."}), 404
 
     try:
+        db = session['db']
         query_embedding = get_embeddings_from_api([query])[0]
         docs = db.similarity_search_by_vector(embedding=query_embedding, k=3)
         context = "\n\n".join([doc.page_content for doc in docs])
@@ -212,31 +170,27 @@ def get_bot_response_api():
         user_prompt = f"Context:\n---\n{context}\n---\nQuestion: {query}"
 
         api_url = "https://api.together.xyz/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {TOGETHER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        headers = { "Authorization": f"Bearer {TOGETHER_API_KEY}" }
         payload = {
-            "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-            "max_tokens": 1024,
-            "temperature": 0.7,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            "model": "meta-llama/Llama-3-8B-Instruct-Turbo", # Switched to a faster model
+            "max_tokens": 1024, "temperature": 0.7,
+            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         }
 
         response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()
-
         api_response = response.json()
         response_text = api_response['choices'][0]['message']['content'].strip()
-
-        return jsonify({"response": response_text}), 200
+        return jsonify({"response": response_text})
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Error during API call: {str(e)}"}), 500
 
-
-
+# Initialize the embedding model once on startup
+print("Initializing embedding model...")
+try:
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_LOCAL, model_kwargs={'device': 'cpu'})
+    print("Embedding model loaded successfully.")
+except Exception as e:
+    print(f"FATAL: Could not load embedding model. {e}")
