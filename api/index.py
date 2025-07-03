@@ -9,7 +9,7 @@ from waitress import serve
 # --- Langchain and Model Imports ---
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-# HuggingFaceEmbeddings is no longer needed as we use an API
+from langchain_huggingface import HuggingFaceEmbeddings 
 from langchain_community.vectorstores import Chroma
 
 # --- Web Scraping and API Imports ---
@@ -19,7 +19,8 @@ from urllib.parse import urljoin
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# MODIFICATION: Changed to a more general CORS configuration to ensure all origins are allowed.
+CORS(app)
 
 # --- Configuration ---
 TOGETHER_API_KEY = os.environ.get('tgp_v1_P219VY9RYZhULscfC_wx7Vt9Q6ZYf5CpqU-3-Smxrps')
@@ -27,14 +28,14 @@ TOGETHER_API_KEY = os.environ.get('tgp_v1_P219VY9RYZhULscfC_wx7Vt9Q6ZYf5CpqU-3-S
 REQUESTS_HEADERS = {
     'User-Agent': 'MyChatbotScraper/1.0 (mycontact@example.com)'
 }
-CHUNK_SIZE = 1024 # Increased chunk size for fewer API calls
+CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 100
+EMBEDDING_MODEL_LOCAL = "sentence-transformers/all-MiniLM-L6-v2"
 PERSIST_DIRECTORY = "chroma_db"
 
 # --- Global Variables ---
-# No need for the embeddings model variable
-models_loaded_successfully = True # We don't load local models anymore
-# The key is the session_id, the value is now the Chroma DB object itself.
+embeddings = None
+models_loaded_successfully = True
 active_sessions = {}
 
 # --- Helper Function for API Calls ---
@@ -126,8 +127,6 @@ def load_data_and_create_db(root_url: str):
 
     if os.path.exists(specific_persist_dir):
         print(f"Loading existing vector store from: {specific_persist_dir}")
-        # We pass a dummy embedding function because we won't use it for querying.
-        # This is a workaround for Chroma's requirement.
         dummy_embed_func = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2", model_kwargs={'device':'cpu'})
         db = Chroma(persist_directory=specific_persist_dir, embedding_function=dummy_embed_func)
     else:
@@ -136,6 +135,7 @@ def load_data_and_create_db(root_url: str):
         discovered_urls = discover_all_site_links(root_url)
         if not discovered_urls: raise RuntimeError(f"Failed to discover links from {root_url}.")
         
+        print(f"Discovered {len(discovered_urls)} pages to scrape.")
         all_docs = []
         for url in discovered_urls:
             print(f"  Scraping: {url}")
@@ -148,7 +148,6 @@ def load_data_and_create_db(root_url: str):
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
         texts = text_splitter.split_documents(all_docs)
         
-        # Get embeddings for all text chunks via API
         print(f"Getting embeddings for {len(texts)} chunks via API...")
         text_contents = [doc.page_content for doc in texts]
         text_embeddings = get_embeddings_from_api(text_contents)
@@ -157,7 +156,7 @@ def load_data_and_create_db(root_url: str):
         print(f"Creating and persisting vector store at: {specific_persist_dir}")
         db = Chroma.from_texts(
             texts=text_contents,
-            embedding=None, # We provide embeddings directly
+            embedding=None,
             embeddings=text_embeddings,
             metadatas=text_metadatas,
             persist_directory=specific_persist_dir
@@ -205,18 +204,13 @@ def get_bot_response_api():
         return jsonify({"error": "Invalid session ID or session has expired."}), 404
 
     try:
-        # 1. Get embedding for the user's query via API
         query_embedding = get_embeddings_from_api([query])[0]
-
-        # 2. Search the local DB with the query embedding
         docs = db.similarity_search_by_vector(embedding=query_embedding, k=3)
         context = "\n\n".join([doc.page_content for doc in docs])
 
-        # 3. Prepare the prompt for the Together.ai API
         system_prompt = "You are a helpful AI assistant. Use the context provided by the user to answer their question. If the answer is not in the context, say so."
         user_prompt = f"Context:\n---\n{context}\n---\nQuestion: {query}"
 
-        # 4. Call the Together.ai Chat Completions API
         api_url = "https://api.together.xyz/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {TOGETHER_API_KEY}",
@@ -244,7 +238,5 @@ def get_bot_response_api():
         traceback.print_exc()
         return jsonify({"error": f"Error during API call: {str(e)}"}), 500
 
-# No need for the __main__ block when deploying as a web service
-# Render's Gunicorn will run the 'app' object directly.
 
 
