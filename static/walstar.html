@@ -6,76 +6,18 @@
     <title>Walstar Technologies - Web Design & App Development</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Main Website Styles */
+        body { font-family: 'Inter', sans-serif; }
         /* Chatbot Styles */
-        #chatbot-toggle-button {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 60px;
-            height: 60px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            z-index: 999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-        }
-        
-        #chatbot-popup {
-            display: none;
-            position: fixed;
-            bottom: 90px;
-            right: 20px;
-            width: 100%;
-            max-width: 370px;
-            height: 500px;
-            border: 1px solid #ccc;
-            background-color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            border-radius: 12px;
-            z-index: 1000;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        #chatbot-header {
-            background: #007bff;
-            color: white;
-            padding: 15px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        #chatbot-close-button {
-             background: none;
-             border: none;
-             color: white;
-             font-size: 24px;
-             cursor: pointer;
-        }
-
-        #chatbot-messages {
-            flex-grow: 1;
-            padding: 15px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            background-color: #f8f9fa;
-        }
-
+        #chatbot-toggle-button { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background-color: #007bff; color: white; border: none; border-radius: 50%; cursor: pointer; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); z-index: 999; display: flex; justify-content: center; align-items: center; font-size: 24px; }
+        #chatbot-popup { display: none; position: fixed; bottom: 90px; right: 20px; width: 100%; max-width: 370px; height: 500px; border: 1px solid #ccc; background-color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border-radius: 12px; z-index: 1000; flex-direction: column; overflow: hidden; }
+        #chatbot-header { background: #007bff; color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        #chatbot-close-button { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+        #chatbot-messages { flex-grow: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background-color: #f8f9fa; }
         .message { padding: 10px 15px; border-radius: 18px; max-width: 85%; word-wrap: break-word; }
         .user-message { background-color: #007bff; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
         .bot-message { background-color: #e9ecef; color: #333; align-self: flex-start; border-bottom-left-radius: 4px; }
         .status-message { background-color: #f0f0f0; color: #666; font-style: italic; font-size: 0.9em; text-align: center; align-self: center; padding: 8px 15px; border-radius: 15px;}
-
         #chatbot-input-area { padding: 15px; display: flex; border-top: 1px solid #eee; background-color: #fff; }
         #chatbot-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; margin-right: 10px; font-size: 1em; }
         #chatbot-send-button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; }
@@ -91,7 +33,6 @@
             <div>
                 <a href="#about" class="text-gray-600 hover:text-blue-600 px-3 py-2">About</a>
                 <a href="#services" class="text-gray-600 hover:text-blue-600 px-3 py-2">Services</a>
-                <a href="#process" class="text-gray-600 hover:text-blue-600 px-3 py-2">Process</a>
                 <a href="#contact" class="bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700">Contact Us</a>
             </div>
         </nav>
@@ -101,9 +42,8 @@
         <!-- Hero Section -->
         <section class="bg-blue-600 text-white text-center py-20">
             <div class="container mx-auto px-6">
-                <h2 class="text-4xl font-extrabold mb-4">Where Innovation Meets Excellence in Web Solutions!</h2>
-                <p class="text-lg mb-8">We are a leading web design and app development company, creating high-quality digital solutions for businesses around the world.</p>
-                <a href="#services" class="bg-white text-blue-600 font-bold py-3 px-6 rounded-full hover:bg-gray-200">Explore Our Services</a>
+                <h2 class="text-4xl font-extrabold mb-4">Where Innovation Meets Excellence</h2>
+                <p class="text-lg mb-8">Leading web design and app development for a global clientele.</p>
             </div>
         </section>
 
@@ -112,7 +52,7 @@
             <div class="container mx-auto px-6 text-center">
                 <h2 class="text-3xl font-bold mb-6">About Walstar Technologies</h2>
                 <p class="max-w-3xl mx-auto text-gray-600">
-                    Established in 2017, Walstar Technologies Pvt. Ltd is a premier web design and app development company based in India. Our mission is to help organizations grow by building a strong and successful online presence. We are a multi-disciplinary team of highly motivated and innovative professionals committed to providing the best in Internet technology, both in technical expertise and customer service.
+                    Established in 2017, Walstar Technologies is a premier web design and app development company based in India, helping organizations grow by building a strong and successful online presence.
                 </p>
             </div>
         </section>
@@ -121,80 +61,24 @@
         <section id="services" class="bg-gray-100 py-16">
             <div class="container mx-auto px-6">
                 <h2 class="text-3xl font-bold text-center mb-12">Our Core Services</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">Web Development</h3>
-                        <p class="text-gray-600">We create the perfect blend of imagination and functionality, delivering custom websites that are both visually stunning and highly functional.</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">Mobile App Development</h3>
-                        <p class="text-gray-600">Ready to design and deliver awesome mobile applications for iOS and Android that engage your users and grow your business.</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">UX Design</h3>
-                        <p class="text-gray-600">Our ultimate goal is to convey a professional site through intuitive and user-friendly design, ensuring the best possible user experience.</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">ERP & CRM Development</h3>
-                        <p class="text-gray-600">We build custom Enterprise Resource Planning and Customer Relationship Management systems to streamline your operations.</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">Digital Marketing & SEO</h3>
-                        <p class="text-gray-600">Strategic digital marketing and SEO services to increase your visibility, attract more customers, and boost your online presence.</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-                        <h3 class="text-xl font-bold mb-4">Maintenance and Support</h3>
-                        <p class="text-gray-600">Reliable maintenance and support to ensure the smooth operation, security, and long-term success of your digital assets.</p>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="bg-white p-8 rounded-lg shadow-lg text-center"><h3>Web Development</h3></div>
+                    <div class="bg-white p-8 rounded-lg shadow-lg text-center"><h3>Mobile App Development</h3></div>
+                    <div class="bg-white p-8 rounded-lg shadow-lg text-center"><h3>Digital Marketing & SEO</h3></div>
                 </div>
             </div>
         </section>
-
-        <!-- Our Process Section -->
-        <section id="process" class="py-16">
-            <div class="container mx-auto px-6">
-                <h2 class="text-3xl font-bold text-center mb-12">Our Development Process</h2>
-                <div class="flex flex-col md:flex-row justify-center items-center gap-8">
-                    <div class="text-center p-4"><b>1. Planning</b><p class="text-sm text-gray-600">Collaborate to create a strong project plan.</p></div>
-                    <div class="text-center p-4"><b>2. Wireframing</b><p class="text-sm text-gray-600">Sketching the blueprint of your application.</p></div>
-                    <div class="text-center p-4"><b>3. Design</b><p class="text-sm text-gray-600">Creating the visual look and feel.</p></div>
-                    <div class="text-center p-4"><b>4. Code</b><p class="text-sm text-gray-600">Bringing the design to life with clean code.</p></div>
-                    <div class="text-center p-4"><b>5. Testing</b><p class="text-sm text-gray-600">Rigorous QA to ensure a bug-free product.</p></div>
-                    <div class="text-center p-4"><b>6. Deployment</b><p class="text-sm text-gray-600">Launching the application to its final destination.</p></div>
-                </div>
-            </div>
-        </section>
-        
-        <!-- Industries We Serve -->
-        <section class="bg-gray-100 py-16">
-            <div class="container mx-auto px-6 text-center">
-                <h2 class="text-3xl font-bold mb-6">Industries We Serve</h2>
-                <div class="flex flex-wrap justify-center gap-4">
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Healthcare</span>
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Education</span>
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Travel</span>
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Real Estate</span>
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Mortgage</span>
-                    <span class="bg-blue-100 text-blue-800 text-sm font-medium me-2 px-4 py-2 rounded-full">Retail</span>
-                </div>
-            </div>
-        </section>
-
     </main>
 
     <!-- Footer -->
     <footer id="contact" class="bg-gray-800 text-white py-10">
         <div class="container mx-auto px-6 text-center">
-            <p>Let's Turn Ideas into Reality. Work with Us!</p>
-            <p class="mt-2">Email: info@walstartechnologies.com | Phone: +91 777 503 2331</p>
-            <p class="text-sm mt-6">&copy; 2025 Walstar Technologies. All Rights Reserved.</p>
+            <p>&copy; 2025 Walstar Technologies. All Rights Reserved.</p>
         </div>
     </footer>
 
-
     <!-- Chatbot UI -->
     <button id="chatbot-toggle-button">💬</button>
-
     <div id="chatbot-popup">
         <div id="chatbot-header">
             <span>Walstar Assistant</span>
@@ -215,16 +99,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const messagesContainer = document.getElementById('chatbot-messages');
     const inputField = document.getElementById('chatbot-input');
     const sendButton = document.getElementById('chatbot-send-button');
-
-    const API_BASE_URL = 'http://127.0.0.1:5000/api';
+    const API_BASE_URL = 'https://chatbot-69bu.onrender.com/api'; 
     
-    let isChatbotInitialized = false;
-    let sessionId = crypto.randomUUID();
+    let isChatbotReady = false;
+    let sessionId = null;
+    let statusInterval = null;
 
     toggleButton.addEventListener('click', () => {
         chatbotPopup.style.display = 'flex';
         toggleButton.style.display = 'none';
-        if (!isChatbotInitialized) {
+        if (!sessionId) {
             initializeChatbot();
         }
     });
@@ -235,19 +119,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     sendButton.addEventListener('click', handleUserQuery);
-    inputField.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            handleUserQuery();
-        }
-    });
+    inputField.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleUserQuery(); });
     
     async function initializeChatbot() {
-        isChatbotInitialized = true;
-        setUiLoading(true, 'Hello! Learning about Walstar Technologies...');
+        sessionId = crypto.randomUUID();
+        isChatbotReady = false;
+        addMessage('Hello! I am learning about this website. This may take a moment...', 'bot');
+        setUiLoading(true, 'Initializing...');
         
-        // MODIFICATION: Hardcode the target URL to ensure scraping works correctly.
         const siteUrl = "https://www.walstartechnologies.com/";
-        console.log(`Auto-loading data for: ${siteUrl}`);
 
         try {
             const response = await fetch(`${API_BASE_URL}/load_url`, {
@@ -256,18 +136,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url: siteUrl, session_id: sessionId }),
             });
 
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Failed to load website data.');
+            if (response.status !== 202) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to start loading process.');
+            }
             
-            setUiLoading(false, 'Ask me about our services or process!');
+            addMessage('Processing has started. I will let you know when I am ready.', 'status');
+            // Start polling for status
+            statusInterval = setInterval(checkLoadStatus, 3000);
 
         } catch (error) {
             console.error('Error initializing chatbot:', error);
-            setUiLoading(false, `Error: ${error.message}`, true);
+            setUiLoading(false, `Initialization Error: ${error.message}`, true);
+        }
+    }
+
+    async function checkLoadStatus() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/load_status/${sessionId}`);
+            const data = await response.json();
+
+            if (data.status === 'ready') {
+                clearInterval(statusInterval);
+                isChatbotReady = true;
+                setUiLoading(false, 'Ask me about our services or process!');
+                addMessage('I have finished learning about the site. How can I help you?', 'bot');
+            } else if (data.status === 'error') {
+                clearInterval(statusInterval);
+                setUiLoading(false, 'An error occurred during loading.', true);
+            }
+            // If status is 'loading', do nothing and wait for the next interval.
+
+        } catch (error) {
+            console.error('Error checking status:', error);
+            clearInterval(statusInterval);
+            setUiLoading(false, 'Could not check status.', true);
         }
     }
     
     async function handleUserQuery() {
+        if (!isChatbotReady) return;
         const query = inputField.value.trim();
         if (!query) return;
 
@@ -284,7 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to get an answer.');
-
             addMessage(data.response, 'bot');
 
         } catch (error) {
@@ -307,11 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
         inputField.disabled = isLoading;
         sendButton.disabled = isLoading;
         inputField.placeholder = placeholderText;
-        if(isError) {
-             inputField.style.borderColor = 'red';
-        } else {
-             inputField.style.borderColor = '#ccc';
-        }
     }
 });
 </script>
