@@ -4,11 +4,12 @@ import shutil
 import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from waitress import serve
 
 # --- Langchain and Model Imports ---
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings 
+# HuggingFaceEmbeddings is no longer needed as we use an API
 from langchain_community.vectorstores import Chroma
 
 # --- Web Scraping and API Imports ---
@@ -21,25 +22,42 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # --- Configuration ---
-# MODIFICATION: Read the API key from environment variables for security.
 TOGETHER_API_KEY = os.environ.get('tgp_v1_P219VY9RYZhULscfC_wx7Vt9Q6ZYf5CpqU-3-Smxrps')
 
 REQUESTS_HEADERS = {
     'User-Agent': 'MyChatbotScraper/1.0 (mycontact@example.com)'
 }
-CHUNK_SIZE = 512
-CHUNK_OVERLAP = 64
-EMBEDDING_MODEL_LOCAL = "sentence-transformers/all-MiniLM-L6-v2"
+CHUNK_SIZE = 1024 # Increased chunk size for fewer API calls
+CHUNK_OVERLAP = 100
 PERSIST_DIRECTORY = "chroma_db"
 
 # --- Global Variables ---
-embeddings = None
-models_loaded_successfully = False
+# No need for the embeddings model variable
+models_loaded_successfully = True # We don't load local models anymore
+# The key is the session_id, the value is now the Chroma DB object itself.
 active_sessions = {}
+
+# --- Helper Function for API Calls ---
+def get_embeddings_from_api(texts: list[str]) -> list[list[float]]:
+    """Gets embeddings for a list of texts using the Together.ai API."""
+    api_url = "https://api.together.xyz/v1/embeddings"
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "togethercomputer/m2-bert-80M-8k-retrieval",
+        "input": texts
+    }
+    
+    response = requests.post(api_url, headers=headers, json=payload)
+    response.raise_for_status()
+    result = response.json()
+    return [data['embedding'] for data in result['data']]
 
 # --- Core Functions ---
 
-def discover_internal_links(root_url: str) -> list[str]:
+def discover_all_site_links(root_url: str) -> list[str]:
     """Crawls a website starting from the root_url to discover all internal links."""
     urls_to_visit = {root_url}
     visited_urls = set()
@@ -73,14 +91,12 @@ def discover_internal_links(root_url: str) -> list[str]:
 
         except requests.RequestException as e:
             print(f"Could not fetch {url}: {e}")
-        except Exception as e:
-            print(f"An error occurred on {url}: {e}")
 
     return list(all_site_links)
 
 
 def extract_text_from_url(url, headers):
-    """Smarter scraper that targets main content and removes the chatbot's own UI."""
+    """Smarter scraper that targets main content."""
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
@@ -94,58 +110,32 @@ def extract_text_from_url(url, headers):
             tag.decompose()
         
         main_content = soup.find('main') or soup.find('article') or soup.body
-        if not main_content:
-            return None, "Could not find main content or body."
+        if not main_content: return None, "No main content."
             
         text = main_content.get_text(separator=' ', strip=True)
-        text = re.sub(r'\s\s+', ' ', text)
-        page_title = soup.title.string if soup.title else "Unknown Title"
-        return text, page_title
+        return re.sub(r'\s\s+', ' ', text), soup.title.string if soup.title else "Unknown Title"
 
     except Exception as e:
         print(f"Error processing {url}: {e}")
         return None, f"Processing Error: {e}"
 
-def initialize_embedding_model():
-    """Loads only the embedding model into memory."""
-    global embeddings, models_loaded_successfully
-    
-    if models_loaded_successfully:
-        return
-
-    print("Initializing embedding model...")
-    try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL_LOCAL,
-            model_kwargs={'device': 'cpu'}
-        )
-        models_loaded_successfully = True
-        print("Embedding model initialized successfully!")
-
-    except Exception as e:
-        print(f"FATAL: Error initializing embedding model: {e}")
-        traceback.print_exc()
-        models_loaded_successfully = False
-
-def load_data_and_create_retriever(root_url: str):
-    """Scrapes data, creates embeddings, and returns a retriever."""
-    if not models_loaded_successfully:
-        raise RuntimeError("Embedding model is not loaded.")
-
+def load_data_and_create_db(root_url: str):
+    """Scrapes data, gets embeddings via API, and creates a Chroma DB."""
     url_safe_name = re.sub(r'[^a-zA-Z0-9]', '_', root_url)
     specific_persist_dir = os.path.join(PERSIST_DIRECTORY, url_safe_name)
 
     if os.path.exists(specific_persist_dir):
         print(f"Loading existing vector store from: {specific_persist_dir}")
-        db = Chroma(persist_directory=specific_persist_dir, embedding_function=embeddings)
+        # We pass a dummy embedding function because we won't use it for querying.
+        # This is a workaround for Chroma's requirement.
+        dummy_embed_func = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2", model_kwargs={'device':'cpu'})
+        db = Chroma(persist_directory=specific_persist_dir, embedding_function=dummy_embed_func)
     else:
         print(f"No existing vector store found. Starting crawl for: {root_url}")
         
         discovered_urls = discover_all_site_links(root_url)
-        if not discovered_urls:
-            raise RuntimeError(f"Failed to discover any links from {root_url}.")
+        if not discovered_urls: raise RuntimeError(f"Failed to discover links from {root_url}.")
         
-        print(f"Discovered {len(discovered_urls)} pages to scrape.")
         all_docs = []
         for url in discovered_urls:
             print(f"  Scraping: {url}")
@@ -153,23 +143,33 @@ def load_data_and_create_retriever(root_url: str):
             if scraped_text:
                 all_docs.append(Document(page_content=scraped_text, metadata={"source": url, "title": page_title}))
         
-        if not all_docs:
-            raise RuntimeError("No documents were scraped successfully.")
+        if not all_docs: raise RuntimeError("No documents scraped.")
 
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
         texts = text_splitter.split_documents(all_docs)
         
+        # Get embeddings for all text chunks via API
+        print(f"Getting embeddings for {len(texts)} chunks via API...")
+        text_contents = [doc.page_content for doc in texts]
+        text_embeddings = get_embeddings_from_api(text_contents)
+        text_metadatas = [doc.metadata for doc in texts]
+
         print(f"Creating and persisting vector store at: {specific_persist_dir}")
-        db = Chroma.from_documents(texts, embeddings, persist_directory=specific_persist_dir)
+        db = Chroma.from_texts(
+            texts=text_contents,
+            embedding=None, # We provide embeddings directly
+            embeddings=text_embeddings,
+            metadatas=text_metadatas,
+            persist_directory=specific_persist_dir
+        )
     
-    return db.as_retriever(search_kwargs={"k": 3})
+    return db
 
 # --- Flask API Endpoints ---
 
 @app.route("/")
 def home():
-    status = "Ready" if models_loaded_successfully else "Initialization Failed"
-    return jsonify({"message": "RAG Chatbot API (Together.ai)", "status": status, "active_sessions": len(active_sessions)})
+    return jsonify({"message": "RAG Chatbot API (Together.ai)", "status": "Ready"})
 
 @app.route("/api/load_url", methods=["POST"])
 def load_url_endpoint():
@@ -183,9 +183,9 @@ def load_url_endpoint():
     print(f"Received request to load data for URL: {url} (Session: {session_id})")
     
     try:
-        new_retriever = load_data_and_create_retriever(url)
-        active_sessions[session_id] = new_retriever
-        print(f"Session {session_id} created successfully. Total active sessions: {len(active_sessions)}")
+        new_db = load_data_and_create_db(url)
+        active_sessions[session_id] = new_db
+        print(f"Session {session_id} created. Total active sessions: {len(active_sessions)}")
         return jsonify({"message": f"Successfully loaded data for {url}"}), 200
     except Exception as e:
         traceback.print_exc()
@@ -200,17 +200,23 @@ def get_bot_response_api():
     if not all([query, session_id]):
         return jsonify({"error": "Query and session_id parameters are required."}), 400
 
-    retriever = active_sessions.get(session_id)
-    if not retriever:
+    db = active_sessions.get(session_id)
+    if not db:
         return jsonify({"error": "Invalid session ID or session has expired."}), 404
 
     try:
-        docs = retriever.get_relevant_documents(query)
+        # 1. Get embedding for the user's query via API
+        query_embedding = get_embeddings_from_api([query])[0]
+
+        # 2. Search the local DB with the query embedding
+        docs = db.similarity_search_by_vector(embedding=query_embedding, k=3)
         context = "\n\n".join([doc.page_content for doc in docs])
 
+        # 3. Prepare the prompt for the Together.ai API
         system_prompt = "You are a helpful AI assistant. Use the context provided by the user to answer their question. If the answer is not in the context, say so."
         user_prompt = f"Context:\n---\n{context}\n---\nQuestion: {query}"
 
+        # 4. Call the Together.ai Chat Completions API
         api_url = "https://api.together.xyz/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {TOGETHER_API_KEY}",
@@ -238,16 +244,7 @@ def get_bot_response_api():
         traceback.print_exc()
         return jsonify({"error": f"Error during API call: {str(e)}"}), 500
 
-print("Starting application initialization...")
-os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
-initialize_embedding_model()
+# No need for the __main__ block when deploying as a web service
+# Render's Gunicorn will run the 'app' object directly.
 
-if models_loaded_successfully:
-    print("-" * 50)
-    print("Embedding model loaded. API is ready for multiple sessions.")
-    print("Responses will be generated by Together.ai.")
-    print("-" * 50)
-else:
-    print("-" * 50)
-    print("MODEL INITIALIZATION FAILED. The API will not be functional.")
-    print("-" * 50)
+
